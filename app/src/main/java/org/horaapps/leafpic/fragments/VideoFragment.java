@@ -1,8 +1,10 @@
 package org.horaapps.leafpic.fragments;
 
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
-import android.support.v4.app.Fragment;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -11,68 +13,60 @@ import android.widget.ImageView;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.request.RequestOptions;
-import com.mikepenz.iconics.view.IconicsImageView;
 
-import org.horaapps.leafpic.activities.SingleMediaActivity;
+import org.horaapps.leafpic.R;
 import org.horaapps.leafpic.data.Media;
 import org.horaapps.leafpic.data.StorageHelper;
+import org.horaapps.liz.ThemeHelper;
+import org.horaapps.liz.ui.ThemedIcon;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
 
 /**
- * Created by dnld on 18/02/16.
+ * A Media Fragment for showing a Video Preview.
  */
+public class VideoFragment extends BaseMediaFragment {
 
-public class VideoFragment extends Fragment {
+    @BindView(R.id.media_view) ImageView previewView;
+    @BindView(R.id.video_play_icon) ThemedIcon playVideoIcon;
 
-    private Media video;
-
-    public static VideoFragment newInstance(Media media) {
-        VideoFragment videoFragment = new VideoFragment();
-
-        Bundle args = new Bundle();
-        args.putParcelable("video", media);
-        videoFragment.setArguments(args);
-
-        return videoFragment;
+    @NonNull
+    public static VideoFragment newInstance(@NonNull Media media) {
+        return BaseMediaFragment.newInstance(new VideoFragment(), media);
     }
 
     @Override
-    public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        video = getArguments().getParcelable("video");
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        View rootView = inflater.inflate(R.layout.fragment_video, container, false);
+        ButterKnife.bind(this, rootView);
+        return rootView;
     }
 
-
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
-                             Bundle savedInstanceState) {
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
 
-
-        View view = inflater.inflate(org.horaapps.leafpic.R.layout.fragment_video, container, false);
-
-        ImageView picture = (ImageView) view.findViewById(org.horaapps.leafpic.R.id.media_view);
-        IconicsImageView videoInd = (IconicsImageView) view.findViewById(org.horaapps.leafpic.R.id.icon);
-        videoInd.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                startActivity(
-                        new Intent(Intent.ACTION_VIEW)
-                                .setDataAndType(StorageHelper.getUriForFile(getContext(), video.getFile()),
-                                        video.getMimeType()));
-            }
+        playVideoIcon.setOnClickListener(v -> {
+            Uri uri = StorageHelper.getUriForFile(getContext(), media.getFile());
+            Intent intent = new Intent(Intent.ACTION_VIEW).setDataAndType(uri, media.getMimeType());
+            intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(intent);
         });
 
-        RequestOptions options = new RequestOptions()
-                .signature(video.getSignature())
-                .centerCrop()
-                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC);
+        // TODO: See where we can move this. Seems like boilerplate code that belongs in
+        // a utility class or Builder of some sort.
+        RequestOptions options =
+                new RequestOptions().signature(media.getSignature()).centerCrop()
+                        .diskCacheStrategy(
+                                DiskCacheStrategy.AUTOMATIC);
 
+        Glide.with(getContext()).load(media.getUri()).apply(options).into(previewView);
+        setTapListener(previewView);
+    }
 
-        Glide.with(getContext())
-                .load(video.getUri())
-                .apply(options)
-                .into(picture);
-
-        picture.setOnClickListener(v -> ((SingleMediaActivity) getActivity()).toggleSystemUI());
-        return view;
+    @Override
+    public void refreshTheme(ThemeHelper themeHelper) {
+        playVideoIcon.refreshTheme(themeHelper);
     }
 }

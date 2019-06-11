@@ -1,11 +1,9 @@
 package org.horaapps.leafpic.activities;
 
-import android.media.MediaScannerConnection;
-import android.net.Uri;
 import android.os.Bundle;
 import android.support.annotation.CallSuper;
+import android.support.annotation.NonNull;
 import android.support.v7.widget.CardView;
-import android.support.v7.widget.DefaultItemAnimator;
 import android.support.v7.widget.GridLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
@@ -14,24 +12,29 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.OvershootInterpolator;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.mikepenz.google_material_typeface_library.GoogleMaterial;
-import com.mikepenz.iconics.view.IconicsImageView;
-import com.orhanobut.hawk.Hawk;
 
 import org.horaapps.leafpic.R;
 import org.horaapps.leafpic.SelectAlbumBuilder;
 import org.horaapps.leafpic.activities.base.SharedMediaActivity;
 import org.horaapps.leafpic.data.HandlingAlbums;
 import org.horaapps.leafpic.data.filter.ImageFileFilter;
-import org.horaapps.leafpic.data.provider.ContentProviderHelper;
+import org.horaapps.leafpic.util.AnimationUtils;
 import org.horaapps.leafpic.util.StringUtils;
+import org.horaapps.leafpic.util.preferences.Prefs;
+import org.horaapps.liz.ui.ThemedIcon;
 
 import java.io.File;
 import java.util.ArrayList;
+
+import jp.wasabeef.recyclerview.animators.LandingAnimator;
+
+import static org.horaapps.leafpic.data.MediaHelper.scanFile;
 
 /**
  * Created by dnld on 01/04/16.
@@ -39,7 +42,6 @@ import java.util.ArrayList;
 public class BlackWhiteListActivity extends SharedMediaActivity {
 
     public static final String EXTRA_TYPE = "typeExcluded";
-
     private RecyclerView mRecyclerView;
     private ItemsAdapter adapter;
     private Toolbar toolbar;
@@ -50,15 +52,15 @@ public class BlackWhiteListActivity extends SharedMediaActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_black_white_list);
-        toolbar = (Toolbar) findViewById(org.horaapps.leafpic.R.id.toolbar);
-        mRecyclerView = (RecyclerView) findViewById(org.horaapps.leafpic.R.id.excluded_albums);
+        toolbar = findViewById(R.id.toolbar);
+        mRecyclerView = findViewById(R.id.excluded_albums);
         initUi();
         loadFolders(getIntent().getIntExtra(EXTRA_TYPE, HandlingAlbums.EXCLUDED));
     }
 
     private void loadFolders(int type) {
-        this.typeExcluded = type == HandlingAlbums.EXCLUDED;
-        folders = getAlbums().getFolders(type);
+        typeExcluded = type == HandlingAlbums.EXCLUDED;
+        folders = HandlingAlbums.getInstance(getApplicationContext()).getFolders(type);
         checkNothing();
         if (isExcludedMode()) setTitle(getString(R.string.excluded_items));
         else setTitle(getString(R.string.white_list));
@@ -92,36 +94,39 @@ public class BlackWhiteListActivity extends SharedMediaActivity {
 
     private void addFolder(final File dir) {
         String[] list = dir.list(new ImageFileFilter(true));
-        final boolean[] found = { false };
         if (list != null && list.length > 0) {
-            MediaScannerConnection.scanFile(getApplicationContext(), list, null, new MediaScannerConnection.OnScanCompletedListener() {
-                @Override
-                public void onScanCompleted(String s, Uri uri) {
-                    // TODO: 12/15/16 test this!
-                    if(!found[0]) {
-                        long albumId = ContentProviderHelper.getAlbumId(getApplicationContext(), s);
-                        if (albumId != -1) {
-                            found[0] = true;
-                            Toast.makeText(BlackWhiteListActivity.this, "got the ID", Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                }
-            });
-            getAlbums().addFolderToWhiteList(dir.getPath());
+            scanFile(getApplicationContext(), list);
+            HandlingAlbums.getInstance(getApplicationContext()).addFolderToWhiteList(dir.getPath());
             folders.add(0, dir.getPath());
             adapter.notifyItemInserted(0);
             checkNothing();
         } else {
-            Toast.makeText(this, R.string.no_media_in_this_folder, Toast.LENGTH_SHORT).show();
+            Toast.makeText(getApplicationContext(), R.string.no_media_in_this_folder, Toast.LENGTH_SHORT).show();
             // TODO: 12/26/16 should i add or not?
         }
     }
 
     private void checkNothing() {
-        findViewById(R.id.white_list_decription_card).setVisibility((isExcludedMode() || !(Hawk.get("preference_show_tips", true))) ? View.GONE : View.VISIBLE);
-        //TODO: EMOJI EASTER EGG - NOTHING TO SHOW
-        findViewById(R.id.nothing_to_show_placeholder).setVisibility(folders.size() < 1 && isExcludedMode() && Hawk.get("emoji_easter_egg", 0) == 0 ? View.VISIBLE : View.GONE);
-        findViewById(R.id.ll_emoji_easter_egg).setVisibility(folders.size() < 1 && isExcludedMode() && Hawk.get("emoji_easter_egg", 0) == 1 ? View.VISIBLE : View.GONE);
+        findViewById(R.id.white_list_decription_card).setVisibility(
+                showDescriptionCard() ? View.VISIBLE : View.GONE);
+
+        findViewById(R.id.nothing_to_show_placeholder).setVisibility(
+                showNothingToShowPlaceholder() ? View.VISIBLE : View.GONE);
+
+        findViewById(R.id.ll_emoji_easter_egg).setVisibility(
+                showEasterEgg() ? View.VISIBLE : View.GONE);
+    }
+
+    private boolean showDescriptionCard() {
+        return !isExcludedMode() && Prefs.getToggleValue(getString(R.string.preference_show_tips), true);
+    }
+
+    private boolean showNothingToShowPlaceholder() {
+        return folders.size() < 1 && isExcludedMode() && !Prefs.showEasterEgg();
+    }
+
+    private boolean showEasterEgg() {
+        return folders.size() < 1 && isExcludedMode() && Prefs.showEasterEgg();
     }
 
     @Override
@@ -132,12 +137,7 @@ public class BlackWhiteListActivity extends SharedMediaActivity {
                         .title(getString(R.string.chose_folders))
                         .exploreMode(true)
                         .force(true)
-                        .onFolderSelected(new SelectAlbumBuilder.OnFolderSelected() {
-                            @Override
-                            public void folderSelected(String path) {
-                                addFolder(new File(path));
-                            }
-                        }).show();
+                        .onFolderSelected(path -> addFolder(new File(path))).show();
                 return true;
             case R.id.action_toggle:
                 loadFolders(isExcludedMode() ? HandlingAlbums.INCLUDED : HandlingAlbums.EXCLUDED);
@@ -150,17 +150,15 @@ public class BlackWhiteListActivity extends SharedMediaActivity {
     private void initUi() {
         setSupportActionBar(toolbar);
         toolbar.setNavigationIcon(getToolbarIcon(GoogleMaterial.Icon.gmd_arrow_back));
-        toolbar.setNavigationOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                onBackPressed();
-            }
-        });
+        toolbar.setNavigationOnClickListener(v -> onBackPressed());
 
         mRecyclerView.setHasFixedSize(true);
         mRecyclerView.setAdapter((adapter = new ItemsAdapter()));
-        mRecyclerView.setLayoutManager(new GridLayoutManager(this, 1));
-        mRecyclerView.setItemAnimator(new DefaultItemAnimator());
+        mRecyclerView.setLayoutManager(new GridLayoutManager(getApplicationContext(), 1));
+        mRecyclerView.setItemAnimator(
+                AnimationUtils.getItemAnimator(
+                        new LandingAnimator(new OvershootInterpolator(1f))
+                ));
     }
 
     @CallSuper
@@ -184,26 +182,24 @@ public class BlackWhiteListActivity extends SharedMediaActivity {
 
     private class ItemsAdapter extends RecyclerView.Adapter<ItemsAdapter.ViewHolder> {
 
-        private View.OnClickListener listener = new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                String path = (String) v.getTag();
-                int i = folders.indexOf(path);
-                getAlbums().clearStatusFolder(path);
-                folders.remove(i);
-                notifyItemRemoved(i);
-                checkNothing();
-            }
+        private View.OnClickListener listener = v -> {
+            String path = (String) v.getTag();
+            int i = folders.indexOf(path);
+            HandlingAlbums.getInstance(getApplicationContext()).clearStatusFolder(path);
+            folders.remove(i);
+            notifyItemRemoved(i);
+            checkNothing();
         };
 
-        public ItemsAdapter.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        @NonNull
+        public ItemsAdapter.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.card_track_folder, parent, false);
             v.findViewById(R.id.remove_icon).setOnClickListener(listener);
             return new ItemsAdapter.ViewHolder(v);
         }
 
         @Override
-        public void onBindViewHolder(final ItemsAdapter.ViewHolder holder, final int position) {
+        public void onBindViewHolder(@NonNull final ItemsAdapter.ViewHolder holder, final int position) {
             String itm = folders.get(position);
             holder.path.setText(itm);
             holder.name.setText(StringUtils.getName(itm));
@@ -222,16 +218,16 @@ public class BlackWhiteListActivity extends SharedMediaActivity {
 
         class ViewHolder extends RecyclerView.ViewHolder {
             LinearLayout layout;
-            IconicsImageView imgFolder, imgRemove;
+            ThemedIcon imgFolder, imgRemove;
             TextView name, path;
 
             ViewHolder(View itemView) {
                 super(itemView);
-                layout = (LinearLayout) itemView.findViewById(R.id.linear_card_excluded);
-                imgFolder = (IconicsImageView) itemView.findViewById(R.id.folder_icon);
-                imgRemove = (IconicsImageView) itemView.findViewById(R.id.remove_icon);
-                name = (TextView) itemView.findViewById(R.id.folder_name);
-                path = (TextView) itemView.findViewById(R.id.folder_path);
+                layout = itemView.findViewById(R.id.linear_card_excluded);
+                imgFolder = itemView.findViewById(R.id.folder_icon);
+                imgRemove = itemView.findViewById(R.id.remove_icon);
+                name = itemView.findViewById(R.id.folder_name);
+                path = itemView.findViewById(R.id.folder_path);
             }
         }
     }

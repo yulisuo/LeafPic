@@ -1,4 +1,4 @@
-v0.9
+v0.7
 ====
 
 ### Features
@@ -7,9 +7,11 @@ v0.9
 * Affix
 * Slide Show #266
 * Show all Images Feature #416
+* Print
 * Delete/Move/Copy/Rename with progress dialog, and cancel feature #386
 
 ### Fixes
 
+* Fixed crashes resuming from recents #475 #398
 * Fixed crashes KitKAT #418 #410
 * Improved opening from other apps #417 #403

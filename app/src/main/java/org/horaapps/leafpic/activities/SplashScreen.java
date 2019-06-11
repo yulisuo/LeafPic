@@ -21,8 +21,6 @@ import android.widget.Toast;
 import org.horaapps.leafpic.LookForMediaJob;
 import org.horaapps.leafpic.R;
 import org.horaapps.leafpic.activities.base.SharedMediaActivity;
-import org.horaapps.leafpic.data.Album;
-import org.horaapps.leafpic.data.HandlingAlbums;
 import org.horaapps.leafpic.util.PermissionUtils;
 import org.horaapps.leafpic.util.StringUtils;
 import org.horaapps.liz.ColorPalette;
@@ -31,24 +29,24 @@ import java.io.File;
 
 /**
  * Created by dnld on 01/04/16.
+ * The SplashScreen Activity is released during the screen waiting time.
  */
 public class SplashScreen extends SharedMediaActivity {
 
     private final String TAG = SplashScreen.class.getSimpleName();
 
-    private final int READ_EXTERNAL_STORAGE_ID = 12;
+    private final int EXTERNAL_STORAGE_PERMISSIONS = 12;
     private static final int PICK_MEDIA_REQUEST = 44;
 
     final static String CONTENT = "content";
-    final static String PICK_MODE = "pick_mode";
 
     final static int ALBUMS_PREFETCHED = 2376;
     final static int PHOTOS_PREFETCHED = 2567;
     final static int ALBUMS_BACKUP = 1312;
-    private boolean PICK_INTENT = false;
+    private boolean pickMode = false;
     public final static String ACTION_OPEN_ALBUM = "org.horaapps.leafpic.OPEN_ALBUM";
 
-    private Album tmpAlbum;
+    //private Album tmpAlbum;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -64,39 +62,53 @@ public class SplashScreen extends SharedMediaActivity {
         setNavBarColor();
         setStatusBarColor();
 
-        if (PermissionUtils.isDeviceInfoGranted(this)) {
+        String action = getIntent().getAction();
 
-                if (getIntent().getAction().equals(ACTION_OPEN_ALBUM)) {
-                    Bundle data = getIntent().getExtras();
-                    if (data != null) {
-                        String ab = data.getString("albumPath");
-                        if (ab != null) {
-                            File dir = new File(ab);
-                            tmpAlbum = new Album(getApplicationContext(), dir.getAbsolutePath(), data.getInt("albumId", -1), dir.getName(), -1);
-                            // TODO: 4/10/17 handle
-                            start();
-                        }
-                    } else StringUtils.showToast(getApplicationContext(), "Album not found");
-                } else  // default intent
-                    start();
+        if (action != null) {
+            pickMode = action.equals(Intent.ACTION_GET_CONTENT) || action.equals(Intent.ACTION_PICK);
+        }
 
-                PICK_INTENT = getIntent().getAction().equals(Intent.ACTION_GET_CONTENT) || getIntent().getAction().equals(Intent.ACTION_PICK);
+        if (PermissionUtils.isStoragePermissionsGranted(this)) {
+
+
+            if (action != null && action.equals(ACTION_OPEN_ALBUM)) {
+                Bundle data = getIntent().getExtras();
+                if (data != null) {
+                    String ab = data.getString("albumPath");
+                    if (ab != null) {
+                        File dir = new File(ab);
+                        //tmpAlbum = new Album(getApplicationContext(), dir.getAbsolutePath(), data.getInt("albumId", -1), dir.getName(), -1);
+                        // TODO: 4/10/17 handle
+                        start();
+                    }
+                } else StringUtils.showToast(getApplicationContext(), "Album not found");
+            } else {  // default intent
+                start();
+            }
+
 
         } else
-            PermissionUtils.requestPermissions(this, READ_EXTERNAL_STORAGE_ID, Manifest.permission.READ_EXTERNAL_STORAGE);
+            PermissionUtils.requestPermissions(this, EXTERNAL_STORAGE_PERMISSIONS, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE);
 
         //startLookingForMedia();
     }
 
     private void start() {
-        startActivity(new Intent(SplashScreen.this, MainActivity.class));
-        finish();
+        Intent intent = new Intent(SplashScreen.this, MainActivity.class);
+
+        if (pickMode) {
+            intent.putExtra(MainActivity.ARGS_PICK_MODE, true);
+            startActivityForResult(intent, PICK_MEDIA_REQUEST);
+        } else {
+            startActivity(intent);
+            finish();
+        }
     }
 
     private void startLookingForMedia() {
 
         new Thread(() -> {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && getAlbums().getFoldersCount(HandlingAlbums.INCLUDED) > 0) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP /* TODO  && (has included folders) */) {
 
                 JobInfo job = new JobInfo.Builder(0, new ComponentName(getApplicationContext(), LookForMediaJob.class))
                         .setPeriodic(1000)
@@ -144,9 +156,19 @@ public class SplashScreen extends SharedMediaActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         switch (requestCode) {
-            case READ_EXTERNAL_STORAGE_ID:
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) start();
-                else Toast.makeText(SplashScreen.this, getString(org.horaapps.leafpic.R.string.storage_permission_denied), Toast.LENGTH_LONG).show();
+            case EXTERNAL_STORAGE_PERMISSIONS:
+                boolean gotPermission = grantResults.length > 0;
+
+                for (int result : grantResults) {
+                    gotPermission &= result == PackageManager.PERMISSION_GRANTED;
+                }
+
+                if (gotPermission) {
+                    start();
+                } else {
+                    Toast.makeText(SplashScreen.this, getString(R.string.storage_permission_denied), Toast.LENGTH_LONG).show();
+                    finish();
+                }
                 break;
             default:
                 super.onRequestPermissionsResult(requestCode, permissions, grantResults);

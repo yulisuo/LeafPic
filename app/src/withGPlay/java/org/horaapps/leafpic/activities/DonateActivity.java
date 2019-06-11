@@ -2,8 +2,11 @@ package org.horaapps.leafpic.activities;
 
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
 import android.support.v7.widget.CardView;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
@@ -16,16 +19,16 @@ import android.widget.Toast;
 
 import com.mikepenz.community_material_typeface_library.CommunityMaterial;
 import com.mikepenz.iconics.IconicsDrawable;
-import com.mikepenz.iconics.view.IconicsImageView;
 
 import org.horaapps.leafpic.R;
 import org.horaapps.leafpic.SecretConstants;
-import org.horaapps.leafpic.util.CustomTabService;
+import org.horaapps.leafpic.util.ChromeCustomTabs;
 import org.horaapps.leafpic.util.StringUtils;
 import org.horaapps.leafpic.util.inapppurchase.IabHelper;
 import org.horaapps.leafpic.util.inapppurchase.IabResult;
 import org.horaapps.leafpic.util.inapppurchase.Purchase;
 import org.horaapps.liz.ThemedActivity;
+import org.horaapps.liz.ui.ThemedIcon;
 
 /**
  * Created by Jibo on 02/03/2016.
@@ -33,7 +36,7 @@ import org.horaapps.liz.ThemedActivity;
 public class DonateActivity extends ThemedActivity {
 
     private Toolbar toolbar;
-    private CustomTabService cts;
+    private ChromeCustomTabs cts;
     private ScrollView scr;
     private IabHelper mHelper;
     private SeekBar bar; private int progress = 2;
@@ -63,7 +66,7 @@ public class DonateActivity extends ThemedActivity {
         bar = (SeekBar) findViewById(R.id.seek_bar_donations);
 
         setNavBarColor();
-        cts = new CustomTabService(DonateActivity.this);
+        cts = new ChromeCustomTabs(this);
         scr = (ScrollView)findViewById(org.horaapps.leafpic.R.id.donateAct_scrollView);
         initUi();
         mHelper = new IabHelper(this, SecretConstants.getBase64EncodedPublicKey(getApplicationContext()));
@@ -89,6 +92,9 @@ public class DonateActivity extends ThemedActivity {
         mHelper = null;
     }
 
+    public static void startActivity(@NonNull Context context) {
+        context.startActivity(new Intent(context, DonateActivity.class));
+    }
 
     private void initUi(){
 
@@ -193,10 +199,10 @@ public class DonateActivity extends ThemedActivity {
         /** Icons **/
         color = getIconColor();
 
-        ((IconicsImageView) findViewById(org.horaapps.leafpic.R.id.donate_googleplay_icon_title)).setColor(color);
-        ((IconicsImageView) findViewById(org.horaapps.leafpic.R.id.donate_paypal_icon_title)).setColor(color);
-        ((IconicsImageView) findViewById(org.horaapps.leafpic.R.id.donate_bitcoin_icon_title)).setColor(color);
-        ((IconicsImageView) findViewById(org.horaapps.leafpic.R.id.donate_header_icon)).setColor(color);
+        ((ThemedIcon) findViewById(org.horaapps.leafpic.R.id.donate_googleplay_icon_title)).setColor(color);
+        ((ThemedIcon) findViewById(org.horaapps.leafpic.R.id.donate_paypal_icon_title)).setColor(color);
+        ((ThemedIcon) findViewById(org.horaapps.leafpic.R.id.donate_bitcoin_icon_title)).setColor(color);
+        ((ThemedIcon) findViewById(org.horaapps.leafpic.R.id.donate_header_icon)).setColor(color);
 
         /** TextViews **/
         color = getTextColor();

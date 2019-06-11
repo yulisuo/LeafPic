@@ -7,12 +7,13 @@
     android:layout_width="wrap_content"
     android:foreground="@drawable/ripple"
     android:layout_height="wrap_content">
+
     <ImageView
         android:id="@+id/photo_preview"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:scaleType="centerCrop"
-    />
+        android:scaleType="centerCrop" />
+
     <TextView
         android:id="@+id/photo_path"
         android:layout_width="match_parent"
@@ -27,7 +28,8 @@
         android:maxLines="1"
         android:layout_alignParentBottom="true"
         tools:targetApi="lollipop" />
-    <com.mikepenz.iconics.view.IconicsImageView
+
+    <org.horaapps.liz.ui.ThemedIcon
         android:id="@+id/gif_icon"
         android:layout_width="@dimen/icon_sub_width_height"
         android:layout_height="@dimen/icon_sub_width_height"
@@ -40,7 +42,8 @@
         app:iiv_color="@color/md_white_1000"
         app:iiv_icon="gmd-gif"
         tools:targetApi="lollipop" />
-    <com.mikepenz.iconics.view.IconicsImageView
+
+    <org.horaapps.liz.ui.ThemedIcon
         android:id="@+id/icon"
         android:layout_width="26dp"
         android:layout_height="26dp"
@@ -50,4 +53,5 @@
         app:iiv_color="@color/md_white_1000"
         app:iiv_icon="gmd-play-circle-filled"
         tools:targetApi="lollipop" />
+
 </org.horaapps.leafpic.views.SquareRelativeLayout>

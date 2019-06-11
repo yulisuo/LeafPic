@@ -15,21 +15,24 @@ import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.DecodeFormat;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.request.RequestOptions;
-import com.orhanobut.hawk.Hawk;
 
 import org.horaapps.leafpic.CardViewStyle;
 import org.horaapps.leafpic.R;
 import org.horaapps.leafpic.data.Album;
+import org.horaapps.leafpic.data.AlbumsHelper;
 import org.horaapps.leafpic.data.Media;
 import org.horaapps.leafpic.data.sort.AlbumsComparators;
 import org.horaapps.leafpic.data.sort.SortingMode;
 import org.horaapps.leafpic.data.sort.SortingOrder;
+import org.horaapps.leafpic.items.ActionsListener;
 import org.horaapps.leafpic.util.StringUtils;
+import org.horaapps.leafpic.util.preferences.Prefs;
 import org.horaapps.liz.ColorPalette;
 import org.horaapps.liz.Theme;
 import org.horaapps.liz.ThemeHelper;
 import org.horaapps.liz.ThemedAdapter;
 import org.horaapps.liz.ThemedViewHolder;
+import org.horaapps.liz.ui.ThemedIcon;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,8 +42,6 @@ import java.util.stream.Collectors;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
-import io.reactivex.Observable;
-import io.reactivex.subjects.PublishSubject;
 
 /**
  * Created by dnld on 1/7/16.
@@ -49,36 +50,44 @@ public class AlbumsAdapter extends ThemedAdapter<AlbumsAdapter.ViewHolder> {
 
     private List<Album> albums;
 
-    private final PublishSubject<Album> onClickSubject = PublishSubject.create();
-    private final PublishSubject<Album> onChangeSelectedSubject = PublishSubject.create();
-
     private int selectedCount = 0;
 
     private SortingOrder sortingOrder;
     private SortingMode sortingMode;
 
     private Drawable placeholder;
-    private CardViewStyle cvs;
+    private CardViewStyle cardViewStyle;
 
-    public AlbumsAdapter(Context context, SortingMode sortingMode, SortingOrder sortingOrder) {
+    private ActionsListener actionsListener;
+    private boolean isSelecting;
+
+    public AlbumsAdapter(Context context, ActionsListener actionsListener) {
         super(context);
         albums = new ArrayList<>();
         placeholder = getThemeHelper().getPlaceHolder();
-        cvs = CardViewStyle.fromValue(Hawk.get("card_view_style", 0));
-        this.sortingMode = sortingMode;
-        this.sortingOrder = sortingOrder;
+        cardViewStyle = Prefs.getCardStyle();
+        this.sortingMode = AlbumsHelper.getSortingMode();
+        this.sortingOrder = AlbumsHelper.getSortingOrder();
+        this.actionsListener = actionsListener;
     }
 
     public void sort() {
-        /*if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
-            albums.sort(AlbumsComparators.getComparator(sortingMode));
-            //albums = albums.stream().sorted(AlbumsComparators.getComparator(sortingMode)).collect(Collectors.toList());
-        else Collections.sort(albums, AlbumsComparators.getComparator(sortingMode));*/
         Collections.sort(albums, AlbumsComparators.getComparator(sortingMode, sortingOrder));
-        /*if (sortingOrder.equals(SortingOrder.DESCENDING))
-            reverseOrder();*/
-
         notifyDataSetChanged();
+    }
+
+    public List<String> getAlbumsPaths() {
+        ArrayList<String> list = new ArrayList<>();
+
+        for (Album album : albums) {
+            list.add(album.getPath());
+        }
+
+        return list;
+    }
+
+    public Album get(int pos) {
+        return albums.get(pos);
     }
 
     public void notifyItemChanaged(Album album) {
@@ -128,6 +137,15 @@ public class AlbumsAdapter extends ThemedAdapter<AlbumsAdapter.ViewHolder> {
         return null;
     }
 
+    private void startSelection() {
+        isSelecting = true;
+        actionsListener.onSelectMode(true);
+    }
+
+    private void stopSelection() {
+        isSelecting = false;
+        actionsListener.onSelectMode(false);
+    }
 
     public int getSelectedCount() {
         return selectedCount;
@@ -138,7 +156,7 @@ public class AlbumsAdapter extends ThemedAdapter<AlbumsAdapter.ViewHolder> {
             if (albums.get(i).setSelected(true))
                 notifyItemChanged(i);
         selectedCount = albums.size();
-        onChangeSelectedSubject.onNext(Album.getEmptyAlbum());
+        startSelection();
     }
 
     public void removeSelectedAlbums(){
@@ -175,12 +193,40 @@ public class AlbumsAdapter extends ThemedAdapter<AlbumsAdapter.ViewHolder> {
         notifyDataSetChanged();
     }
 
-    public void clearSelected() {
-        for (int i = 0; i < albums.size(); i++)
-            if (albums.get(i).setSelected(false))
+    public void removeAlbum(Album album) {
+        int i = albums.indexOf(album);
+        albums.remove(i);
+        notifyItemRemoved(i);
+
+    }
+
+    public void invalidateSelectedCount() {
+        int c = 0;
+        for (Album m : this.albums) {
+            c += m.isSelected() ? 1 : 0;
+        }
+
+        this.selectedCount = c;
+
+        if (this.selectedCount == 0) stopSelection();
+        else {
+            this.actionsListener.onSelectionCountChanged(selectedCount, albums.size());
+        }
+    }
+
+    public boolean clearSelected() {
+
+        boolean changed = true;
+        for (int i = 0; i < albums.size(); i++) {
+            boolean b = albums.get(i).setSelected(false);
+            if (b)
                 notifyItemChanged(i);
+            changed &= b;
+        }
+
         selectedCount = 0;
-        onChangeSelectedSubject.onNext(Album.getEmptyAlbum());
+        stopSelection();
+        return changed;
     }
 
     public void forceSelectedCount(int count) {
@@ -191,14 +237,14 @@ public class AlbumsAdapter extends ThemedAdapter<AlbumsAdapter.ViewHolder> {
     public void refreshTheme(ThemeHelper theme) {
         placeholder = theme.getPlaceHolder();
 
-        cvs = CardViewStyle.fromValue(Hawk.get("card_view_style", 0));
+        cardViewStyle = Prefs.getCardStyle();
         super.refreshTheme(theme);
     }
 
     @Override
     public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
         View v;
-        switch (cvs) {
+        switch (cardViewStyle) {
             default:
             case MATERIAL: v = LayoutInflater.from(parent.getContext()).inflate(R.layout.card_album_material, parent, false); break;
             case FLAT: v = LayoutInflater.from(parent.getContext()).inflate(R.layout.card_album_flat, parent, false); break;
@@ -209,25 +255,21 @@ public class AlbumsAdapter extends ThemedAdapter<AlbumsAdapter.ViewHolder> {
 
     private void notifySelected(boolean increase) {
         selectedCount += increase ? 1 : -1;
+        actionsListener.onSelectionCountChanged(selectedCount, getItemCount());
+
+        if (selectedCount == 0 && isSelecting) stopSelection();
+        else if (selectedCount > 0 && !isSelecting) startSelection();
     }
 
     public boolean selecting() {
-        return selectedCount > 0;
-    }
-
-    public Observable<Album> getClicks() {
-        return onClickSubject;
-    }
-
-    public Observable<Album> getSelectedClicks() {
-        return onChangeSelectedSubject;
+        return isSelecting;
     }
 
     @Override
     public void onBindViewHolder(final AlbumsAdapter.ViewHolder holder, int position) {
-
+        // TODO Calvin: Major Refactor - No business logic here.
         Album a = albums.get(position);
-        holder.refreshTheme(getThemeHelper(), cvs, a.isSelected());
+        holder.refreshTheme(getThemeHelper(), cardViewStyle, a.isSelected());
 
         Media f = a.getCover();
 
@@ -258,10 +300,10 @@ public class AlbumsAdapter extends ThemedAdapter<AlbumsAdapter.ViewHolder> {
 
         holder.mediaLabel.setTextColor(textColor);
 
-        holder.llCount.setVisibility(Hawk.get("show_n_photos", true) ? View.VISIBLE : View.GONE);
+        holder.llCount.setVisibility(Prefs.showMediaCount() ? View.VISIBLE : View.GONE);
         holder.name.setText(StringUtils.htmlFormat(a.getName(), textColor, false, true));
         holder.nMedia.setText(StringUtils.htmlFormat(String.valueOf(a.getCount()), accentColor, true, false));
-        holder.path.setVisibility(Hawk.get("show_album_path", false) ? View.VISIBLE : View.GONE);
+        holder.path.setVisibility(Prefs.showAlbumPath() ? View.VISIBLE : View.GONE);
         holder.path.setText(a.getPath());
 
         //START Animation MAKES BUG ON FAST TAP ON CARD
@@ -275,15 +317,13 @@ public class AlbumsAdapter extends ThemedAdapter<AlbumsAdapter.ViewHolder> {
             if (selecting()) {
                 notifySelected(a.toggleSelected());
                 notifyItemChanged(position);
-                onChangeSelectedSubject.onNext(a);
             } else
-                onClickSubject.onNext(a);
+                actionsListener.onItemSelected(position);
         });
 
         holder.card.setOnLongClickListener(v -> {
             notifySelected(a.toggleSelected());
             notifyItemChanged(position);
-            onChangeSelectedSubject.onNext(a);
             return true;
         });
     }
@@ -319,12 +359,12 @@ public class AlbumsAdapter extends ThemedAdapter<AlbumsAdapter.ViewHolder> {
         return albums.size();
     }
 
-
     static class ViewHolder extends ThemedViewHolder {
 
         @BindView(R.id.album_card) CardView card;
         @BindView(R.id.album_preview) ImageView picture;
-        @BindView(R.id.selected_icon) View selectedIcon;
+        @BindView(R.id.selected_icon)
+        ThemedIcon selectedIcon;
         @BindView(R.id.ll_album_info) View footer;
         @BindView(R.id.ll_media_count) View llCount;
         @BindView(R.id.album_name) TextView name;
@@ -343,6 +383,7 @@ public class AlbumsAdapter extends ThemedAdapter<AlbumsAdapter.ViewHolder> {
                 footer.setBackgroundColor(theme.getPrimaryColor());
                 picture.setColorFilter(0x77000000, PorterDuff.Mode.SRC_ATOP);
                 selectedIcon.setVisibility(View.VISIBLE);
+                selectedIcon.setColor(theme.getPrimaryColor());
             } else {
                 picture.clearColorFilter();
                 selectedIcon.setVisibility(View.GONE);

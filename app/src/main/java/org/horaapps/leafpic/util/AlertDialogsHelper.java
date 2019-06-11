@@ -31,6 +31,7 @@ import com.orhanobut.hawk.Hawk;
 import org.horaapps.leafpic.R;
 import org.horaapps.leafpic.data.Media;
 import org.horaapps.leafpic.data.metadata.MediaDetailsMap;
+import org.horaapps.leafpic.data.metadata.MetadataHelper;
 import org.horaapps.liz.ThemeHelper;
 import org.horaapps.liz.ThemedActivity;
 
@@ -42,6 +43,8 @@ import java.util.Locale;
 
 import in.uncod.android.bypass.Bypass;
 
+import static org.horaapps.leafpic.util.ServerConstants.LEAFPIC_CHANGELOG;
+
 /**
  * Created by dnld on 19/05/16.
  */
@@ -51,7 +54,7 @@ public class AlertDialogsHelper {
 
         AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(activity, activity.getDialogStyle());
         View dialogLayout = activity.getLayoutInflater().inflate(org.horaapps.leafpic.R.layout.dialog_insert_text, null);
-        TextView textViewTitle = (TextView) dialogLayout.findViewById(org.horaapps.leafpic.R.id.rename_title);
+        TextView textViewTitle = dialogLayout.findViewById(R.id.rename_title);
 
         ((CardView) dialogLayout.findViewById(org.horaapps.leafpic.R.id.dialog_chose_provider_title)).setCardBackgroundColor(activity.getCardBackgroundColor());
         textViewTitle.setBackgroundColor(activity.getPrimaryColor());
@@ -80,8 +83,8 @@ public class AlertDialogsHelper {
         AlertDialog.Builder builder = new AlertDialog.Builder(activity,activity.getDialogStyle());
         View dialogLayout = activity.getLayoutInflater().inflate(R.layout.dialog_text, null);
 
-        TextView dialogTitle = (TextView) dialogLayout.findViewById(org.horaapps.leafpic.R.id.text_dialog_title);
-        TextView dialogMessage = (TextView) dialogLayout.findViewById(org.horaapps.leafpic.R.id.text_dialog_message);
+        TextView dialogTitle = dialogLayout.findViewById(R.id.text_dialog_title);
+        TextView dialogMessage = dialogLayout.findViewById(R.id.text_dialog_message);
 
         ((CardView) dialogLayout.findViewById(org.horaapps.leafpic.R.id.message_card)).setCardBackgroundColor(activity.getCardBackgroundColor());
         dialogTitle.setBackgroundColor(activity.getPrimaryColor());
@@ -95,8 +98,8 @@ public class AlertDialogsHelper {
     public static AlertDialog getProgressDialog(final ThemedActivity activity,  String title, String message){
         AlertDialog.Builder progressDialog = new AlertDialog.Builder(activity, activity.getDialogStyle());
         View dialogLayout = activity.getLayoutInflater().inflate(org.horaapps.leafpic.R.layout.dialog_progress, null);
-        TextView dialogTitle = (TextView) dialogLayout.findViewById(org.horaapps.leafpic.R.id.progress_dialog_title);
-        TextView dialogMessage = (TextView) dialogLayout.findViewById(org.horaapps.leafpic.R.id.progress_dialog_text);
+        TextView dialogTitle = dialogLayout.findViewById(R.id.progress_dialog_title);
+        TextView dialogMessage = dialogLayout.findViewById(R.id.progress_dialog_text);
 
         dialogTitle.setBackgroundColor(activity.getPrimaryColor());
         ((CardView) dialogLayout.findViewById(org.horaapps.leafpic.R.id.progress_dialog_card)).setCardBackgroundColor(activity.getCardBackgroundColor());
@@ -114,9 +117,10 @@ public class AlertDialogsHelper {
 
     public static AlertDialog getDetailsDialog(final ThemedActivity activity, final Media f) {
         AlertDialog.Builder detailsDialogBuilder = new AlertDialog.Builder(activity, activity.getDialogStyle());
-        MediaDetailsMap<String, String> mainDetails = new MediaDetailsMap<>();//f.getMainDetails(activity.getApplicationContext());
+        MetadataHelper mdhelper = new MetadataHelper();
+        MediaDetailsMap<String, String> mainDetails = mdhelper.getMainDetails(activity, f);
         final View dialogLayout = activity.getLayoutInflater().inflate(org.horaapps.leafpic.R.layout.dialog_media_detail, null);
-        ImageView imgMap = (ImageView) dialogLayout.findViewById(org.horaapps.leafpic.R.id.photo_map);
+        ImageView imgMap = dialogLayout.findViewById(R.id.photo_map);
         dialogLayout.findViewById(org.horaapps.leafpic.R.id.details_title).setBackgroundColor(activity.getPrimaryColor());
         ((CardView) dialogLayout.findViewById(org.horaapps.leafpic.R.id.photo_details_card)).setCardBackgroundColor(activity.getCardBackgroundColor());
 
@@ -147,7 +151,7 @@ public class AlertDialogsHelper {
 
         } else imgMap.setVisibility(View.GONE);
 
-        final TextView showMoreText = (TextView) dialogLayout.findViewById(R.id.details_showmore);
+        final TextView showMoreText = dialogLayout.findViewById(R.id.details_showmore);
         showMoreText.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -162,28 +166,28 @@ public class AlertDialogsHelper {
     }
 
     private static void loadDetails(View dialogLayout, ThemedActivity activity, MediaDetailsMap<String, String> metadata) {
-        LinearLayout detailsTable = (LinearLayout) dialogLayout.findViewById(R.id.ll_list_details);
+        LinearLayout detailsTable = dialogLayout.findViewById(R.id.ll_list_details);
 
         int tenPxInDp = Measure.pxToDp (10, activity);
+        int hundredPxInDp = Measure.pxToDp (125, activity);//more or less an hundred. Did not used weight for a strange bug
 
         for (int index : metadata.getKeySet()) {
             LinearLayout row = new LinearLayout(activity.getApplicationContext());
             row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setWeightSum(10);
 
             TextView label = new TextView(activity.getApplicationContext());
             TextView value = new TextView(activity.getApplicationContext());
             label.setText(metadata.getLabel(index));
-            label.setLayoutParams((new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 3f)));
+            label.setLayoutParams((new LinearLayout.LayoutParams(hundredPxInDp, LinearLayout.LayoutParams.WRAP_CONTENT)));
             value.setText(metadata.getValue(index));
-            value.setLayoutParams((new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 7f)));
+            value.setLayoutParams((new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)));
             label.setTextColor(activity.getTextColor());
             label.setTypeface(null, Typeface.BOLD);
             label.setGravity(Gravity.END);
             label.setTextSize(16);
             value.setTextColor(activity.getTextColor());
             value.setTextSize(16);
-            value.setPaddingRelative(tenPxInDp, 0, 0, 0);
+            value.setPaddingRelative(tenPxInDp, 0, tenPxInDp, 0);
             row.addView(label);
             row.addView(value);
             detailsTable.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -199,10 +203,10 @@ public class AlertDialogsHelper {
         final AlertDialog.Builder changelogDialogBuilder = new AlertDialog.Builder(activity, activity.getDialogStyle());
         View dialogLayout = activity.getLayoutInflater().inflate(R.layout.dialog_changelog, null);
 
-        TextView dialogTitle = (TextView) dialogLayout.findViewById(R.id.dialog_changelog_title);
-        TextView dialogMessage = (TextView) dialogLayout.findViewById(R.id.dialog_changelog_text);
-        CardView cvBackground = (CardView) dialogLayout.findViewById(R.id.dialog_changelog_card);
-        ScrollView scrChangelog = (ScrollView) dialogLayout.findViewById(R.id.changelog_scrollview);
+        TextView dialogTitle = dialogLayout.findViewById(R.id.dialog_changelog_title);
+        TextView dialogMessage = dialogLayout.findViewById(R.id.dialog_changelog_text);
+        CardView cvBackground = dialogLayout.findViewById(R.id.dialog_changelog_card);
+        ScrollView scrChangelog = dialogLayout.findViewById(R.id.changelog_scrollview);
 
         cvBackground.setCardBackgroundColor(activity.getCardBackgroundColor());
         dialogTitle.setBackgroundColor(activity.getPrimaryColor());
@@ -216,7 +220,7 @@ public class AlertDialogsHelper {
         try {
             markdownString = getChangeLogFromAssets(activity);
         } catch (IOException e) {
-            CustomTabService.openUrl(activity, "https://github.com/HoraApps/LeafPic/blob/dev/CHANGELOG.md");
+            ChromeCustomTabs.launchUrl(activity, LEAFPIC_CHANGELOG);
             return null;
         }
         CharSequence string = bypass.markdownToSpannable(markdownString);
@@ -229,7 +233,7 @@ public class AlertDialogsHelper {
         changelogDialogBuilder.setNeutralButton(activity.getString(R.string.show_full).toUpperCase(), new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
-                CustomTabService.openUrl(activity, "https://github.com/HoraApps/LeafPic/blob/dev/CHANGELOG.md");
+                ChromeCustomTabs.launchUrl(activity, LEAFPIC_CHANGELOG);
             }
         });
         return changelogDialogBuilder.show();

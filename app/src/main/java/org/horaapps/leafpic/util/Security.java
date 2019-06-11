@@ -81,7 +81,7 @@ public class Security {
         ThemeHelper.setCursorColor(editTextPassword, activity.getTextColor());
         editTextPassword.getBackground().mutate().setColorFilter(activity.getTextColor(), PorterDuff.Mode.SRC_ATOP);
         editTextPassword.setTextColor(activity.getTextColor());
-
+        fingerprintIcon.setColor(activity.getIconColor());
 
         builder.setView(view);
 
@@ -102,6 +102,7 @@ public class Security {
                 fingerprintHandler.setOnFingerprintResult(new FingerprintHandler.CallBack() {
                     @Override
                     public void onSuccess() {
+                        hideKeyboard(activity, editTextPassword.getWindowToken());
                         dialog.dismiss();
                         passwordInterface.onAuthenticated();
                     }
@@ -133,6 +134,7 @@ public class Security {
             }
         });
     }
+
     private static void showKeyboard(Context context) {
         InputMethodManager imm = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
         imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0);
@@ -158,7 +160,6 @@ public class Security {
             throw new RuntimeException(ex);
         }
     }
-
 
     public interface AuthCallBack {
         void onAuthenticated();

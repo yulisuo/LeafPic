@@ -2,19 +2,25 @@ package org.horaapps.leafpic.activities;
 
 import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Parcelable;
 import android.provider.Settings;
 import android.support.annotation.CallSuper;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v4.app.Fragment;
 import android.support.v4.content.ContextCompat;
+import android.support.v4.print.PrintHelper;
 import android.support.v4.view.ViewPager;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.widget.Toolbar;
@@ -47,56 +53,79 @@ import org.horaapps.leafpic.data.AlbumSettings;
 import org.horaapps.leafpic.data.Media;
 import org.horaapps.leafpic.data.MediaHelper;
 import org.horaapps.leafpic.data.StorageHelper;
-import org.horaapps.leafpic.data.sort.SortingMode;
-import org.horaapps.leafpic.data.sort.SortingOrder;
+import org.horaapps.leafpic.data.filter.MediaFilter;
+import org.horaapps.leafpic.data.provider.CPHelper;
+import org.horaapps.leafpic.data.sort.MediaComparators;
+import org.horaapps.leafpic.fragments.BaseMediaFragment;
 import org.horaapps.leafpic.fragments.ImageFragment;
 import org.horaapps.leafpic.util.AlertDialogsHelper;
+import org.horaapps.leafpic.util.AnimationUtils;
+import org.horaapps.leafpic.util.DeviceUtils;
+import org.horaapps.leafpic.util.LegacyCompatFileProvider;
 import org.horaapps.leafpic.util.Measure;
 import org.horaapps.leafpic.util.Security;
 import org.horaapps.leafpic.util.StringUtils;
+import org.horaapps.leafpic.util.preferences.Prefs;
 import org.horaapps.leafpic.views.HackyViewPager;
 import org.horaapps.liz.ColorPalette;
 
 import java.io.File;
 import java.io.InputStream;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.disposables.Disposable;
 import io.reactivex.schedulers.Schedulers;
 
 /**
  * Created by dnld on 18/02/16.
  */
 @SuppressWarnings("ResourceAsColor")
-public class SingleMediaActivity extends SharedMediaActivity {
+public class SingleMediaActivity extends SharedMediaActivity implements BaseMediaFragment.MediaTapListener {
 
     private static final String TAG = SingleMediaActivity.class.getSimpleName();
 
     private static final int SLIDE_SHOW_INTERVAL = 5000;
     private static final String ISLOCKED_ARG = "isLocked";
+
     public static final String ACTION_OPEN_ALBUM = "org.horaapps.leafpic.intent.VIEW_ALBUM";
+    public static final String ACTION_OPEN_ALBUM_LAZY = "org.horaapps.leafpic.intent.VIEW_ALBUM_LAZY";
     private static final String ACTION_REVIEW = "com.android.camera.action.REVIEW";
 
+    public static final String EXTRA_ARGS_ALBUM = "args_album";
+    public static final String EXTRA_ARGS_MEDIA = "args_media";
+    public static final String EXTRA_ARGS_POSITION = "args_position";
 
-    @BindView(R.id.photos_pager)
-    HackyViewPager mViewPager;
-
-    @BindView(R.id.PhotoPager_Layout)
-    RelativeLayout activityBackground;
-    @BindView(R.id.toolbar)
-    Toolbar toolbar;
+    @BindView(R.id.photos_pager) HackyViewPager mViewPager;
+    @BindView(R.id.PhotoPager_Layout) RelativeLayout activityBackground;
+    @BindView(R.id.toolbar) Toolbar toolbar;
 
     private boolean fullScreenMode, customUri = false;
-    int position;
+    private int position;
 
     private Album album;
     private ArrayList<Media> media;
     private MediaPagerAdapter adapter;
     private boolean isSlideShowOn = false;
 
+    private boolean useImageMenu;
+
+    public static void startActivity(@NonNull Context context,
+                                     @Nullable Parcelable album,
+                                     @Nullable Serializable media,
+                                     int position) {
+
+        Intent intent = new Intent(context, SingleMediaActivity.class);
+        intent.putExtra(EXTRA_ARGS_ALBUM, album);
+        intent.setAction(ACTION_OPEN_ALBUM);
+        intent.putExtra(EXTRA_ARGS_MEDIA, media);
+        intent.putExtra(EXTRA_ARGS_POSITION, position);
+        context.startActivity(intent);
+    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -107,13 +136,26 @@ public class SingleMediaActivity extends SharedMediaActivity {
 
         String action = getIntent().getAction();
 
-        if (action != null && action.equals(ACTION_OPEN_ALBUM)) {
-            album = getIntent().getParcelableExtra("album");
-            position = getIntent().getIntExtra("position", 0);
-            media = getIntent().getParcelableArrayListExtra("media");
-        } else if (getIntent().getData() != null) {
-            loadUri(getIntent().getData());
+        if (action != null) {
+            switch (action) {
+                case ACTION_OPEN_ALBUM:
+                    loadAlbum(getIntent());
+                    break;
+                case ACTION_OPEN_ALBUM_LAZY:
+                    loadAlbumsLazy(getIntent());
+                    break;
+                default:
+                    loadUri(getIntent().getData());
+                    break;
+
+            }
         }
+
+        /*if (action != null && action.equals(ACTION_OPEN_ALBUM)) {
+            loadAlbum(getIntent());
+        } else if (getIntent().getData() != null) {
+
+        }*/
 
         if (savedInstanceState != null) {
             mViewPager.setLocked(savedInstanceState.getBoolean(ISLOCKED_ARG, false));
@@ -121,6 +163,54 @@ public class SingleMediaActivity extends SharedMediaActivity {
 
         adapter = new MediaPagerAdapter(getSupportFragmentManager(), media);
         initUi();
+    }
+
+    private void loadAlbum(Intent intent) {
+        album = intent.getParcelableExtra(EXTRA_ARGS_ALBUM);
+        position = intent.getIntExtra(EXTRA_ARGS_POSITION, 0);
+        media = intent.getParcelableArrayListExtra(EXTRA_ARGS_MEDIA);
+    }
+
+    private void loadAlbumsLazy(Intent intent) {
+        album = intent.getParcelableExtra(EXTRA_ARGS_ALBUM);
+        //position = intent.getIntExtra(EXTRA_ARGS_POSITION, 0);
+        Media m = intent.getParcelableExtra(EXTRA_ARGS_MEDIA);
+        media = new ArrayList<>();
+        media.add(m);
+        position = 0;
+
+        ArrayList<Media> list = new ArrayList<>();
+
+        Disposable disposable = CPHelper.getMedia(getApplicationContext(), album)
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .filter(media -> MediaFilter.getFilter(album.filterMode()).accept(media) && !media.equals(m))
+                .subscribe(ma -> {
+                            int i = Collections.binarySearch(
+                                    list, ma, MediaComparators.getComparator(album.settings));
+                            if (i < 0) i = ~i;
+                            list.add(i, ma);
+                        },
+                        throwable -> {
+                            Log.wtf("asd", throwable);
+                        },
+                        () -> {
+                            int i = Collections.binarySearch(
+                                    list, m, MediaComparators.getComparator(album.settings));
+                            if (i < 0) i = ~i;
+
+                            list.add(i, m);
+                            media.clear();
+                            media.addAll(list);
+                            adapter.notifyDataSetChanged();
+                            position = i;
+                            mViewPager.setCurrentItem(position);
+
+                            updatePageTitle(position);
+
+                        });
+
+        disposeLater(disposable);
     }
 
     private void loadUri(Uri uri) {
@@ -144,17 +234,16 @@ public class SingleMediaActivity extends SharedMediaActivity {
             InputStream inputStream = getContentResolver().openInputStream(uri);
             if (inputStream != null) inputStream.close();
         } catch (Exception ex) {
-            //TODO: EMOJI EASTER EGG - THERE'S NOTHING TO SHOW
+            boolean showEasterEgg = Prefs.showEasterEgg();
             ((TextView) findViewById(R.id.nothing_to_show_text_emoji_easter_egg)).setText(R.string.error_occured_open_media);
-            findViewById(R.id.nothing_to_show_placeholder).setVisibility(Hawk.get("emoji_easter_egg", 0) == 0 ? View.VISIBLE : View.GONE);
-            findViewById(R.id.ll_emoji_easter_egg).setVisibility(Hawk.get("emoji_easter_egg", 0) == 1 ? View.VISIBLE : View.GONE);
+            findViewById(R.id.nothing_to_show_placeholder).setVisibility(!showEasterEgg ? View.VISIBLE : View.GONE);
+            findViewById(R.id.ll_emoji_easter_egg).setVisibility(showEasterEgg ? View.VISIBLE : View.GONE);
         }
 
-        media = new ArrayList<>(Collections.singletonList(new Media(getApplicationContext(), uri)));
+        media = new ArrayList<>(Collections.singletonList(new Media(uri)));
         position = 0;
         customUri = true;
     }
-
 
     private void initUi() {
 
@@ -175,7 +264,11 @@ public class SingleMediaActivity extends SharedMediaActivity {
 
         mViewPager.setAdapter(adapter);
         mViewPager.setCurrentItem(position);
-        mViewPager.setPageTransformer(true, new DepthPageTransformer());
+
+        useImageMenu = isCurrentMediaImage();
+
+        mViewPager.setPageTransformer(true, AnimationUtils.getPageTransformer(new DepthPageTransformer()));
+
         mViewPager.addOnPageChangeListener(new ViewPager.OnPageChangeListener() {
             @Override
             public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
@@ -184,8 +277,10 @@ public class SingleMediaActivity extends SharedMediaActivity {
             @Override
             public void onPageSelected(int position) {
                 SingleMediaActivity.this.position = position;
-
                 updatePageTitle(position);
+
+                // Invalidate the options menu only when we aren't using the correct menu
+                if (isCurrentMediaImage() == useImageMenu) return;
                 supportInvalidateOptionsMenu();
             }
 
@@ -201,21 +296,30 @@ public class SingleMediaActivity extends SharedMediaActivity {
         }
     }
 
+    // TODO: Figure out how we should classify Images and GIFs
+    /** This should work temporarily **/
+    private boolean isCurrentMediaImage() {
+        return getCurrentMedia().isImage() && !getCurrentMedia().isGif();
+    }
+
     Handler handler = new Handler();
     Runnable slideShowRunnable = new Runnable() {
         @Override
         public void run() {
-            try{
+            try {
                 mViewPager.setCurrentItem((mViewPager.getCurrentItem() + 1) % album.getCount());
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 e.printStackTrace();
-            }
-            finally{
+            } finally {
                 handler.postDelayed(this, SLIDE_SHOW_INTERVAL);
             }
         }
     };
+
+    @Override
+    public void onViewTapped() {
+        toggleSystemUI();
+    }
 
     @CallSuper
     public void updateUiElements() {
@@ -242,7 +346,7 @@ public class SingleMediaActivity extends SharedMediaActivity {
 
         /**** SETTINGS ****/
 
-        if (Hawk.get("set_max_luminosity", false))
+        if (Prefs.getToggleValue(getString(R.string.preference_max_brightness), false))
             updateBrightness(1.0F);
         else try {
             // TODO: 12/4/16 redo
@@ -254,14 +358,14 @@ public class SingleMediaActivity extends SharedMediaActivity {
             e.printStackTrace();
         }
 
-        if (Hawk.get("set_picture_orientation", false))
+        if (Prefs.getToggleValue(getString(R.string.preference_auto_rotate), false))
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR);
         else setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER);
 
     }
 
     private void updatePageTitle(int position) {
-        getSupportActionBar().setTitle((position + 1) + " " + getString(R.string.of) + " " + adapter.getCount());
+        getSupportActionBar().setTitle(getString(R.string.of, position + 1, adapter.getCount()));
     }
 
     @Override
@@ -277,6 +381,7 @@ public class SingleMediaActivity extends SharedMediaActivity {
         // Inflate the menu; this adds items to the action bar if it is present.
         if (isSlideShowOn) {
             getMenuInflater().inflate(R.menu.menu_view_page_slide_on, menu);
+            menu.findItem(R.id.slide_show).setIcon(getToolbarIcon(CommunityMaterial.Icon.cmd_stop_circle_outline));
         } else {
             getMenuInflater().inflate(R.menu.menu_view_pager, menu);
 
@@ -295,7 +400,7 @@ public class SingleMediaActivity extends SharedMediaActivity {
         super.onConfigurationChanged(newConfig);
         RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(
                 RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.WRAP_CONTENT);
-        if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE)
+        if (DeviceUtils.isLandscape(getResources()))
             params.setMargins(0, 0, Measure.getNavigationBarSize(SingleMediaActivity.this).x, 0);
         else
             params.setMargins(0, 0, 0, 0);
@@ -306,16 +411,17 @@ public class SingleMediaActivity extends SharedMediaActivity {
     @Override
     public boolean onPrepareOptionsMenu(final Menu menu) {
         if (!isSlideShowOn) {
-            menu.setGroupVisible(R.id.only_photos_options, !getCurrentMedia().isVideo());
+            boolean isImage = isCurrentMediaImage();
+            useImageMenu = isImage;
+            menu.setGroupVisible(R.id.only_photos_options, isImage);
 
             if (customUri) {
+                // TODO: 05/05/18 some things can be done even with custom uri
                 menu.setGroupVisible(R.id.on_internal_storage, false);
                 menu.setGroupVisible(R.id.only_photos_options, false);
-                menu.findItem(R.id.sort_action).setVisible(false);
             }
         }
         return super.onPrepareOptionsMenu(menu);
-
     }
 
     @Override
@@ -346,7 +452,6 @@ public class SingleMediaActivity extends SharedMediaActivity {
         }
     }
 
-
     private void displayAlbums() {
         startActivity(new Intent(getApplicationContext(), MainActivity.class));
         finish();
@@ -355,7 +460,7 @@ public class SingleMediaActivity extends SharedMediaActivity {
     private void deleteCurrentMedia() {
         Media currentMedia = getCurrentMedia();
 
-        MediaHelper.deleteMedia(getApplicationContext(), currentMedia)
+        Disposable disposable = MediaHelper.deleteMedia(getApplicationContext(), currentMedia)
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(deleted -> {
@@ -365,17 +470,26 @@ public class SingleMediaActivity extends SharedMediaActivity {
                             }
                         },
                         err -> {
-                            if (err instanceof MediaHelper.DeleteException)
-                                Toast.makeText(this, R.string.delete_error, Toast.LENGTH_SHORT).show();
-                            else
-                                Toast.makeText(this, err.getMessage(), Toast.LENGTH_SHORT).show();
+                            // TODO: 21/05/18 add progress show errors better?
+
+                            Toast.makeText(getApplicationContext(), err.getMessage(), Toast.LENGTH_SHORT).show();
                         },
                         () -> {
                             adapter.notifyDataSetChanged();
                             updatePageTitle(mViewPager.getCurrentItem());
                         });
 
+        disposeLater(disposable);
 
+
+    }
+
+    private void rotateImage(int rotationDegree) {
+        Fragment mediaFragment = adapter.getRegisteredFragment(position);
+        if (!(mediaFragment instanceof ImageFragment))
+            throw new RuntimeException("Trying to rotate a wrong media type!");
+
+        ((ImageFragment) mediaFragment).rotatePicture(rotationDegree);
     }
 
     @Override
@@ -383,21 +497,15 @@ public class SingleMediaActivity extends SharedMediaActivity {
         switch (item.getItemId()) {
 
             case R.id.rotate_180:
-                if (!((ImageFragment) adapter.getRegisteredFragment(position)).rotatePicture(180)) {
-                    Toast.makeText(this, R.string.coming_soon, Toast.LENGTH_SHORT).show();
-                }
+                rotateImage(180);
                 break;
 
             case R.id.rotate_right_90:
-                if (!((ImageFragment) adapter.getRegisteredFragment(position)).rotatePicture(90)) {
-                    Toast.makeText(this, R.string.coming_soon, Toast.LENGTH_SHORT).show();
-                }
+                rotateImage(90);
                 break;
 
             case R.id.rotate_left_90:
-                if (!((ImageFragment) adapter.getRegisteredFragment(position)).rotatePicture(-90)) {
-                    Toast.makeText(this, R.string.coming_soon, Toast.LENGTH_SHORT).show();
-                }
+                rotateImage(-90);
                 break;
 
 
@@ -413,58 +521,18 @@ public class SingleMediaActivity extends SharedMediaActivity {
                         }).show();
                 break;
 
-            case R.id.name_sort_mode:
-                this.album.setDefaultSortingMode(getApplicationContext(), SortingMode.NAME);
-                this.album.sortPhotos();
-                adapter.swapDataSet(media);
-                item.setChecked(true);
-                return true;
-
-            case R.id.date_taken_sort_mode:
-                this.album.setDefaultSortingMode(getApplicationContext(), SortingMode.DATE);
-                this.album.sortPhotos();
-                adapter.swapDataSet(media);
-                item.setChecked(true);
-                return true;
-
-            case R.id.size_sort_mode:
-                this.album.setDefaultSortingMode(getApplicationContext(), SortingMode.SIZE);
-                this.album.sortPhotos();
-                adapter.swapDataSet(media);
-                item.setChecked(true);
-                return true;
-
-            case R.id.type_sort_action:
-                this.album.setDefaultSortingMode(getApplicationContext(), SortingMode.TYPE);
-                this.album.sortPhotos();
-                adapter.swapDataSet(media);
-                item.setChecked(true);
-                return true;
-
-            case R.id.numeric_sort_mode:
-                this.album.setDefaultSortingMode(getApplicationContext(), SortingMode.NUMERIC);
-                this.album.sortPhotos();
-                adapter.swapDataSet(media);
-                item.setChecked(true);
-                return true;
-
-            case R.id.ascending_sort_order:
-                this.album.setDefaultSortingAscending(getApplicationContext(), !item.isChecked() ? SortingOrder.ASCENDING : SortingOrder.DESCENDING);
-                this.album.sortPhotos();
-                adapter.swapDataSet(media);
-
-                item.setChecked(!item.isChecked());
-                return true;
-
-
             case R.id.action_share:
+                // TODO: 16/10/17 check if it works everywhere
                 Intent share = new Intent(Intent.ACTION_SEND);
                 share.setType(getCurrentMedia().getMimeType());
-                share.putExtra(Intent.EXTRA_STREAM, getCurrentMedia().getUri());
+                Uri uri1 = LegacyCompatFileProvider.getUri(this, getCurrentMedia().getFile());
+                share.putExtra(Intent.EXTRA_STREAM, uri1);
+                share.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 startActivity(Intent.createChooser(share, getString(R.string.send_to)));
                 return true;
 
             case R.id.action_edit:
+                // TODO: 16/10/17 redo
                 Uri mDestinationUri = Uri.fromFile(new File(getCacheDir(), "croppedImage.png"));
                 Uri uri = Uri.fromFile(new File(getCurrentMedia().getPath()));
                 UCrop uCrop = UCrop.of(uri, mDestinationUri);
@@ -474,15 +542,17 @@ public class SingleMediaActivity extends SharedMediaActivity {
 
             case R.id.action_use_as:
                 Intent intent = new Intent(Intent.ACTION_ATTACH_DATA);
-                intent.setDataAndType(
-                        getCurrentMedia().getUri(), getCurrentMedia().getMimeType());
+                intent.setDataAndType(LegacyCompatFileProvider.getUri(this,
+                        getCurrentMedia().getFile()), getCurrentMedia().getMimeType());
+                intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 startActivity(Intent.createChooser(intent, getString(R.string.use_as)));
                 return true;
 
             case R.id.action_open_with:
                 Intent intentopenWith = new Intent(Intent.ACTION_VIEW);
-                intentopenWith.setDataAndType(
-                        getCurrentMedia().getUri(), getCurrentMedia().getMimeType());
+                intentopenWith.setDataAndType(LegacyCompatFileProvider.getUri(this,
+                        getCurrentMedia().getFile()), getCurrentMedia().getMimeType());
+                intentopenWith.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 startActivity(Intent.createChooser(intentopenWith, getString(R.string.open_with)));
                 break;
 
@@ -568,7 +638,8 @@ public class SingleMediaActivity extends SharedMediaActivity {
 
             case R.id.action_edit_with:
                 Intent editIntent = new Intent(Intent.ACTION_EDIT);
-                editIntent.setDataAndType(getCurrentMedia().getUri(), getCurrentMedia().getMimeType());
+                editIntent.setDataAndType(LegacyCompatFileProvider.getUri(this,
+                        getCurrentMedia().getFile()), getCurrentMedia().getMimeType());
                 editIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 startActivity(Intent.createChooser(editIntent, getString(R.string.edit_with)));
                 break;
@@ -590,25 +661,37 @@ public class SingleMediaActivity extends SharedMediaActivity {
                 break;
 
             case R.id.action_settings:
-                startActivity(new Intent(getApplicationContext(), SettingsActivity.class));
+                SettingsActivity.startActivity(this);
                 break;
 
             case R.id.action_palette:
                 Intent paletteIntent = new Intent(getApplicationContext(), PaletteActivity.class);
-                paletteIntent.setData(getCurrentMedia().getUri());
+                paletteIntent.setData(LegacyCompatFileProvider.getUri(this,
+                        getCurrentMedia().getFile()));
+                paletteIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 startActivity(paletteIntent);
+                break;
+
+            case R.id.action_print:
+                PrintHelper photoPrinter = new PrintHelper(this);
+                photoPrinter.setScaleMode(PrintHelper.SCALE_MODE_FIT);
+                try (InputStream in = getContentResolver().openInputStream(getCurrentMedia().getUri())) {
+                    Bitmap bitmap = BitmapFactory.decodeStream(in);
+                    photoPrinter.printBitmap(String.format("print_%s", getCurrentMedia().getDisplayPath() ), bitmap);
+                } catch (Exception e) {
+                    Log.e("print", String.format("unable to print %s", getCurrentMedia().getUri()), e);
+                    Toast.makeText(getApplicationContext(), R.string.print_error, Toast.LENGTH_SHORT).show();
+                }
                 break;
 
             case R.id.slide_show:
                 isSlideShowOn = !isSlideShowOn;
-                if (isSlideShowOn) handler.postDelayed(slideShowRunnable, SLIDE_SHOW_INTERVAL);
-                else handler.removeCallbacks(slideShowRunnable);
+                if (isSlideShowOn) {
+                    handler.postDelayed(slideShowRunnable, SLIDE_SHOW_INTERVAL);
+                    hideSystemUI();
+                } else handler.removeCallbacks(slideShowRunnable);
                 supportInvalidateOptionsMenu();
 
-            default:
-                // If we got here, the user's action was not recognized.
-                // Invoke the superclass to handle it.
-                //return super.onOptionsItemSelected(item);
         }
         return super.onOptionsItemSelected(item);
     }
@@ -675,8 +758,7 @@ public class SingleMediaActivity extends SharedMediaActivity {
     }
 
     public void toggleSystemUI() {
-        if (fullScreenMode)
-            showSystemUI();
+        if (fullScreenMode) showSystemUI();
         else hideSystemUI();
     }
 
@@ -685,6 +767,7 @@ public class SingleMediaActivity extends SharedMediaActivity {
             public void run() {
                 toolbar.animate().translationY(-toolbar.getHeight()).setInterpolator(new AccelerateInterpolator())
                         .setDuration(200).start();
+
                 getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(new View.OnSystemUiVisibilityChangeListener() {
                     @Override
                     public void onSystemUiVisibilityChange(int visibility) {
@@ -695,8 +778,8 @@ public class SingleMediaActivity extends SharedMediaActivity {
                         View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION // hide nav bar
-                                | View.SYSTEM_UI_FLAG_FULLSCREEN // hide status bar
+                                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                                | View.SYSTEM_UI_FLAG_FULLSCREEN
                                 | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                                 | View.SYSTEM_UI_FLAG_IMMERSIVE);
 
@@ -720,6 +803,7 @@ public class SingleMediaActivity extends SharedMediaActivity {
             public void run() {
                 toolbar.animate().translationY(Measure.getStatusBarHeight(getResources())).setInterpolator(new DecelerateInterpolator())
                         .setDuration(240).start();
+
                 getWindow().getDecorView().setSystemUiVisibility(
                         View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION

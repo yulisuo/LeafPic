@@ -12,14 +12,15 @@
     android:background="@drawable/ripple"
     android:paddingTop="@dimen/sub_medium_spacing_2"
     android:paddingBottom="@dimen/sub_medium_spacing_2">
-    <com.mikepenz.iconics.view.IconicsImageView
+
+    <org.horaapps.liz.ui.ThemedIcon
         android:id="@+id/folder_icon_bottom_sheet_item"
-        android:layout_height="@dimen/icon_width_height"
-        android:layout_width="@dimen/icon_width_height"
+        android:layout_height="@dimen/icon_size"
+        android:layout_width="@dimen/icon_size"
         app:iiv_icon="gmd-folder"
         android:layout_marginLeft="@dimen/big_spacing"
-        android:layout_marginRight="@dimen/big_spacing"
-        />
+        android:layout_marginRight="@dimen/big_spacing" />
+
     <TextView
         android:id="@+id/name_folder"
         android:layout_width="wrap_content"
@@ -27,6 +28,6 @@
         android:maxLines="2"
         android:ellipsize="middle"
         android:textColor="@color/md_dark_background"
-        android:textSize="16sp"
-        />
+        android:textSize="16sp" />
+
 </LinearLayout>

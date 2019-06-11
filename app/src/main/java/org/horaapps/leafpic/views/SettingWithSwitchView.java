@@ -12,13 +12,12 @@ import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
-import com.mikepenz.iconics.view.IconicsImageView;
-import com.orhanobut.hawk.Hawk;
-
 import org.horaapps.leafpic.R;
+import org.horaapps.leafpic.util.preferences.Prefs;
 import org.horaapps.liz.ThemeHelper;
 import org.horaapps.liz.Themed;
 import org.horaapps.liz.ThemedActivity;
+import org.horaapps.liz.ui.ThemedIcon;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -27,12 +26,14 @@ import butterknife.ButterKnife;
  * Created by darken (darken@darken.eu) on 04.03.2017.
  */
 public class SettingWithSwitchView extends FrameLayout implements View.OnClickListener, Themed {
+
     private final String iconString;
     private final String preferenceKey;
     @StringRes private final int titleRes;
     @StringRes private final int captionRes;
     private final boolean defaultValue;
-    @BindView(R.id.icon) IconicsImageView icon;
+    @BindView(R.id.icon)
+    ThemedIcon icon;
     @BindView(R.id.title) TextView title;
     @BindView(R.id.caption) TextView caption;
     @BindView(R.id.toggle) SwitchCompat toggle;
@@ -72,7 +73,7 @@ public class SettingWithSwitchView extends FrameLayout implements View.OnClickLi
     protected void onFinishInflate() {
         ButterKnife.bind(this);
 
-        icon.setIcon(iconString);
+        icon.setIcon(icon.getIcon().icon(iconString));
         title.setText(titleRes);
         caption.setText(captionRes);
         toggle.setChecked(isChecked());
@@ -109,14 +110,13 @@ public class SettingWithSwitchView extends FrameLayout implements View.OnClickLi
     }
 
     public boolean isChecked() {
-        return Hawk.get(preferenceKey, defaultValue);
+        return Prefs.getToggleValue(preferenceKey, defaultValue);
     }
 
-    public boolean toggle() {
-        Hawk.put(preferenceKey, !isChecked());
+    public void toggle() {
+        Prefs.setToggleValue(preferenceKey, !isChecked());
         boolean checked = isChecked();
         toggle.setChecked(checked);
-        return checked;
     }
 
 }

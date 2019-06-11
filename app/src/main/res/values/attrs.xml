@@ -20,4 +20,23 @@
         <attr name="settingPreferenceKey" format="reference"/>
     </declare-styleable>
 
+    <declare-styleable name="NavigationEntry">
+        <attr name="itemText" format="reference"/>
+        <attr name="itemIcon" format="string"/>
+    </declare-styleable>
+
+    <declare-styleable name="AboutCreator">
+        <attr name="headerImage" format="reference" />
+        <attr name="displayImage" format="reference" />
+        <attr name="name" format="string" />
+        <attr name="role" format="string" />
+        <attr name="description" format="string" />
+    </declare-styleable>
+
+    <declare-styleable name="AboutLink">
+        <attr name="linkIcon" format="string" />
+        <attr name="linkTitle" format="string" />
+        <attr name="linkDescription" format="string" />
+    </declare-styleable>
+
 </resources>

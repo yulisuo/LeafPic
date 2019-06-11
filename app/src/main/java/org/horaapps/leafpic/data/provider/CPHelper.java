@@ -12,6 +12,7 @@ import org.horaapps.leafpic.data.filter.FoldersFileFilter;
 import org.horaapps.leafpic.data.filter.ImageFileFilter;
 import org.horaapps.leafpic.data.sort.SortingMode;
 import org.horaapps.leafpic.data.sort.SortingOrder;
+import org.horaapps.leafpic.util.preferences.Prefs;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -25,7 +26,6 @@ import io.reactivex.ObservableEmitter;
  */
 
 public class CPHelper {
-
 
     public static Observable<Album> getAlbums(Context context, boolean hidden, ArrayList<String> excluded ,SortingMode sortingMode, SortingOrder sortingOrder) {
         return hidden ? getHiddenAlbums(context, excluded) : getAlbums(context, excluded, sortingMode, sortingOrder);
@@ -63,7 +63,7 @@ public class CPHelper {
 
         ArrayList<Object> args = new ArrayList<>();
 
-        if (Hawk.get("set_include_video", true)) {
+        if (Prefs.showVideos()) {
             query.selection(String.format("%s=? or %s=?) group by (%s) %s ",
                     MediaStore.Files.FileColumns.MEDIA_TYPE,
                     MediaStore.Files.FileColumns.MEDIA_TYPE,
@@ -91,19 +91,26 @@ public class CPHelper {
         return QueryUtils.query(query.build(), context.getContentResolver(), Album::new);
     }
 
-
     private static Observable<Album> getHiddenAlbums(Context context, ArrayList<String> excludedAlbums) {
+
+        boolean includeVideo = Prefs.showVideos();
         return Observable.create(subscriber -> {
             try {
+
+                ArrayList<String> lastHidden = Hawk.get("h", new ArrayList<>());
+                for (String s : lastHidden)
+                    checkAndAddFolder(new File(s), subscriber, includeVideo);
+
+                lastHidden.addAll(excludedAlbums);
+
                 for (File storage : StorageHelper.getStorageRoots(context))
-                    fetchRecursivelyHiddenFolder(storage, subscriber, excludedAlbums, Hawk.get("set_include_video", true));
+                    fetchRecursivelyHiddenFolder(storage, subscriber, lastHidden, includeVideo);
                 subscriber.onComplete();
             } catch (Exception err) {
                 subscriber.onError(err);
             }
         });
     }
-
 
     private static void fetchRecursivelyHiddenFolder(File dir, ObservableEmitter<Album> emitter, ArrayList<String> excludedAlbums, boolean includeVideo) {
         if (!isExcluded(dir.getPath(), excludedAlbums)) {
@@ -148,13 +155,22 @@ public class CPHelper {
         return false;
     }
 
-
     //region Media
+
+    public static Observable<Media> getMedia(Context context, Album album) {
+
+        if (album.getId() == -1) return getMediaFromStorage(context, album);
+        else if (album.getId() == Album.ALL_MEDIA_ALBUM_ID)
+            return getAllMediaFromMediaStore(context, album.settings.getSortingMode(), album.settings.getSortingOrder());
+        else
+            return getMediaFromMediaStore(context, album, album.settings.getSortingMode(), album.settings.getSortingOrder());
+    }
 
     public static Observable<Media> getMedia(Context context, Album album, SortingMode sortingMode, SortingOrder sortingOrder) {
 
         if (album.getId() == -1) return getMediaFromStorage(context, album);
-        else if(album.getId() == Album.ALL_MEDIA_ALBUM_ID) return getAllMediaFromMediaStore(context, sortingMode, sortingOrder);
+        else if (album.getId() == Album.ALL_MEDIA_ALBUM_ID)
+            return getAllMediaFromMediaStore(context, sortingMode, sortingOrder);
         else return getMediaFromMediaStore(context, album, sortingMode, sortingOrder);
     }
 
@@ -165,7 +181,7 @@ public class CPHelper {
                 .sort(sortingMode.getMediaColumn())
                 .ascending(sortingOrder.isAscending());
 
-        if (Hawk.get("set_include_video", true)) {
+        if (Prefs.showVideos()) {
             query.selection(String.format("(%s=? or %s=?)",
                     MediaStore.Files.FileColumns.MEDIA_TYPE,
                     MediaStore.Files.FileColumns.MEDIA_TYPE));
@@ -185,7 +201,7 @@ public class CPHelper {
 
         return Observable.create(subscriber -> {
             File dir = new File(album.getPath());
-            File[] files = dir.listFiles(new ImageFileFilter(Hawk.get("set_include_video", true)));
+            File[] files = dir.listFiles(new ImageFileFilter(Prefs.showVideos()));
             try {
                 if (files != null && files.length > 0)
                     for (File file : files)
@@ -206,7 +222,7 @@ public class CPHelper {
                 .sort(sortingMode.getMediaColumn())
                 .ascending(sortingOrder.isAscending());
 
-        if (Hawk.get("set_include_video", true)) {
+        if (Prefs.showVideos()) {
             query.selection(String.format("(%s=? or %s=?) and %s=?",
                     MediaStore.Files.FileColumns.MEDIA_TYPE,
                     MediaStore.Files.FileColumns.MEDIA_TYPE,

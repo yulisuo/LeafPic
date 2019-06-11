@@ -11,6 +11,7 @@ import android.widget.TextView;
 import org.horaapps.leafpic.R;
 import org.horaapps.liz.ColorPalette;
 import org.horaapps.liz.ThemedActivity;
+import org.horaapps.liz.ui.ThemedIcon;
 
 import uz.shift.colorpicker.LineColorPicker;
 import uz.shift.colorpicker.OnColorChangedListener;
@@ -61,6 +62,9 @@ public class ColorsSetting extends ThemedSetting {
                 dialog.dismiss();
             }
         };
+        ((ThemedIcon) dialogLayout.findViewById(R.id.white_basic_theme_icon)).setColor(getActivity().getIconColor());
+        ((ThemedIcon) dialogLayout.findViewById(R.id.dark_basic_theme_icon)).setColor(getActivity().getIconColor());
+        ((ThemedIcon) dialogLayout.findViewById(R.id.dark_amoled_basic_theme_icon)).setColor(getActivity().getIconColor());
         dialogLayout.findViewById(R.id.ll_white_basic_theme).setOnClickListener(listener);
         dialogLayout.findViewById(R.id.ll_dark_basic_theme).setOnClickListener(listener);
         dialogLayout.findViewById(R.id.ll_dark_amoled_basic_theme).setOnClickListener(listener);

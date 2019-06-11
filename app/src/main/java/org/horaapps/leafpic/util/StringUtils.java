@@ -2,14 +2,14 @@ package org.horaapps.leafpic.util;
 
 import android.content.Context;
 import android.os.Build;
-import android.support.annotation.Nullable;
+import android.support.annotation.NonNull;
 import android.text.Html;
 import android.text.Spanned;
-import android.webkit.MimeTypeMap;
 import android.widget.Toast;
 
 import org.horaapps.liz.ColorPalette;
 
+import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -20,37 +20,14 @@ import java.util.regex.Pattern;
  */
 public class StringUtils {
 
-    public static String getMimeType(String path) {
-        int index;
-        if (path == null || (index = path.lastIndexOf('.')) == -1)
-            return "unknown";
-
-        String mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(path.substring(index + 1).toLowerCase());
-        return  mime != null ? mime : "unknown";
-    }
-
-    public static String[] asArray(String ... a) {
+    public static String[] asArray(String... a) {
         return a;
-    }
-
-    public static String getGenericMIME(String mime) {
-        return mime.split("/")[0] + "/*";
     }
 
     public static String getPhotoNameByPath(String path) {
         String b[] = path.split("/");
         String fi = b[b.length - 1];
         return fi.substring(0, fi.lastIndexOf('.'));
-    }
-
-    public static String join(String jointChar, Object... collection) {
-        String s = "";
-        for (Object o : collection) s += o.toString() + jointChar;
-
-        int i = s.lastIndexOf(jointChar);
-        if (i!=-1)
-            s = s.substring(0, i);
-        return s;
     }
 
     @SuppressWarnings("deprecation")
@@ -66,12 +43,13 @@ public class StringUtils {
     }
 
     public static String getPhotoPathRenamed(String olderPath, String newName) {
-        String c = "", b[] = olderPath.split("/");
-        for (int x = 0; x < b.length - 1; x++) c += b[x] + "/";
-        c += newName;
+        StringBuilder c = new StringBuilder();
+        String b[] = olderPath.split("/");
+        for (int x = 0; x < b.length - 1; x++) c.append(b[x]).append("/");
+        c.append(newName);
         String name = b[b.length - 1];
-        c += name.substring(name.lastIndexOf('.'));
-        return c;
+        c.append(name.substring(name.lastIndexOf('.')));
+        return c.toString();
     }
 
     public static String incrementFileNameSuffix(String name) {
@@ -81,7 +59,7 @@ public class StringUtils {
         String baseName = dot != -1 ? name.subSequence(0, dot).toString() : name;
         String nameWoSuffix = baseName;
         Matcher matcher = Pattern.compile("_\\d").matcher(baseName);
-        if(matcher.find()) {
+        if (matcher.find()) {
             int i = baseName.lastIndexOf("_");
             if (i != -1) nameWoSuffix = baseName.subSequence(0, i).toString();
         }
@@ -93,7 +71,7 @@ public class StringUtils {
     public static String getPhotoPathRenamedAlbumChange(String olderPath, String albumNewName) {
         String c = "", b[] = olderPath.split("/");
         for (int x = 0; x < b.length - 2; x++) c += b[x] + "/";
-        c += albumNewName +"/"+b[b.length - 1];
+        c += albumNewName + "/" + b[b.length - 1];
         return c;
     }
 
@@ -127,7 +105,7 @@ public class StringUtils {
         if (bytes < unit) return bytes + " B";
         int exp = (int) (Math.log(bytes) / Math.log(unit));
         String pre = (si ? "kMGTPE" : "KMGTPE").charAt(exp - 1) + (si ? "" : "i");
-        return String.format("%.1f %sB", bytes / Math.pow(unit, exp), pre);
+        return String.format(Locale.ENGLISH, "%.1f %sB", bytes / Math.pow(unit, exp), pre);
     }
 
     public static String b(String content) {
@@ -146,14 +124,6 @@ public class StringUtils {
         return html(res);
     }
 
-    public static Spanned htmlFormat(String content, @Nullable String hexcolor, boolean bold, boolean italic) {
-        String res = content;
-        if (hexcolor != null) res = color(hexcolor, res);
-        if (bold) res = b(res);
-        if (italic) res = i(res);
-        return html(res);
-    }
-
     public static String color(int color, String content) {
         return String.format(Locale.ENGLISH,
                 "<font color='%s'>%s</font>",
@@ -164,6 +134,18 @@ public class StringUtils {
         return String.format(Locale.ENGLISH,
                 "<font color='%s'>%s</font>",
                 color, content);
+    }
+
+    /**
+     * Returns a user-readable date formatted.
+     * eg: Sunday, 31 December 2017
+     *
+     * @param date The date object
+     * @return A user-readable date string.
+     */
+    public static String getUserReadableDate(@NonNull Date date) {
+        SimpleDateFormat dateFormatter = new SimpleDateFormat("E, d MMM yyyy", Locale.getDefault());
+        return dateFormatter.format(date);
     }
 
 }
